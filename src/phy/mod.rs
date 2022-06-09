@@ -21,7 +21,7 @@ Ethernet controller could look as follows:
 
 ```rust
 use smoltcp::Result;
-use smoltcp::phy::{self, DeviceCapabilities, Device, Medium};
+use smoltcp::phy::{self, DeviceCapabilities, Device, Medium, PacketId};
 use smoltcp::time::Instant;
 
 struct StmPhy {
@@ -42,12 +42,12 @@ impl<'a> phy::Device<'a> for StmPhy {
     type RxToken = StmPhyRxToken<'a>;
     type TxToken = StmPhyTxToken<'a>;
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(&'a mut self, _tx_packet_id: Option<PacketId>) -> Option<(Self::RxToken, Self::TxToken)> {
         Some((StmPhyRxToken(&mut self.rx_buffer[..]),
               StmPhyTxToken(&mut self.tx_buffer[..])))
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
         Some(StmPhyTxToken(&mut self.tx_buffer[..]))
     }
 
@@ -131,6 +131,27 @@ pub use self::tracer::Tracer;
     any(target_os = "linux", target_os = "android")
 ))]
 pub use self::tuntap_interface::TunTapInterface;
+
+/// An ID that can be used to uniquely identify a packet to a [`Device`],
+/// sent or received by that same [`Device`]
+#[derive(Debug, PartialEq)]
+pub struct PacketId {
+    id: usize,
+}
+
+impl PacketId {
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    /// CAUTION: don't use too often...
+    pub(crate) fn new(id: usize) -> Self {
+        Self { id }
+    }
+    pub(crate) fn copy_of(&self) -> Self {
+        Self { id: self.id }
+    }
+}
 
 /// A description of checksum behavior for a particular protocol.
 #[derive(Debug, Clone, Copy)]
@@ -243,6 +264,8 @@ pub struct DeviceCapabilities {
     /// If the network device is capable of verifying or computing checksums for some protocols,
     /// it can request that the stack not do so in software to improve performance.
     pub checksum: ChecksumCapabilities,
+
+    pub hardware_timestamping: bool,
 }
 
 impl DeviceCapabilities {
@@ -318,10 +341,13 @@ pub trait Device<'a> {
     /// on the contents of the received packet. For example, this makes it possible to
     /// handle arbitrarily large ICMP echo ("ping") requests, where the all received bytes
     /// need to be sent back, without heap allocation.
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)>;
+    fn receive(
+        &'a mut self,
+        tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)>;
 
     /// Construct a transmit token.
-    fn transmit(&'a mut self) -> Option<Self::TxToken>;
+    fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken>;
 
     /// Get a description of device capabilities.
     fn capabilities(&self) -> DeviceCapabilities;

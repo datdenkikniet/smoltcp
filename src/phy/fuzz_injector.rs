@@ -2,6 +2,8 @@ use crate::phy::{self, Device, DeviceCapabilities};
 use crate::time::Instant;
 use crate::Result;
 
+use super::PacketId;
+
 // This could be fixed once associated consts are stable.
 const MTU: usize = 1536;
 
@@ -59,13 +61,16 @@ where
         caps
     }
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(
+        &'a mut self,
+        tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
         let &mut Self {
             ref mut inner,
             ref fuzz_rx,
             ref fuzz_tx,
         } = self;
-        inner.receive().map(|(rx_token, tx_token)| {
+        inner.receive(tx_packet_id).map(|(rx_token, tx_token)| {
             let rx = RxToken {
                 fuzzer: fuzz_rx,
                 token: rx_token,
@@ -78,13 +83,13 @@ where
         })
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken> {
         let &mut Self {
             ref mut inner,
             fuzz_rx: _,
             ref fuzz_tx,
         } = self;
-        inner.transmit().map(|token| TxToken {
+        inner.transmit(packet_id).map(|token| TxToken {
             fuzzer: fuzz_tx,
             token: token,
         })

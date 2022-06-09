@@ -8,6 +8,8 @@ use crate::phy::{self, sys, Device, DeviceCapabilities, Medium};
 use crate::time::Instant;
 use crate::Result;
 
+use super::PacketId;
+
 /// A socket that captures or transmits the complete frame.
 #[derive(Debug)]
 pub struct RawSocket {
@@ -66,7 +68,10 @@ impl<'a> Device<'a> for RawSocket {
         }
     }
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(
+        &'a mut self,
+        _tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
         let mut lower = self.lower.borrow_mut();
         let mut buffer = vec![0; self.mtu];
         match lower.recv(&mut buffer[..]) {
@@ -83,7 +88,7 @@ impl<'a> Device<'a> for RawSocket {
         }
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
         Some(TxToken {
             lower: self.lower.clone(),
         })
