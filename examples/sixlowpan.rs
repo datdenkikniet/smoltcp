@@ -142,12 +142,12 @@ fn main() {
             }
             Err(_) => None,
         };
-        if let Some((len, endpoint)) = client {
+        if let Some((len, meta)) = client {
             debug!(
                 "udp:6969 send data: {:?}",
                 str::from_utf8(&buffer[..len]).unwrap()
             );
-            socket.send_slice(&buffer[..len], endpoint).unwrap();
+            socket.send_slice(&buffer[..len], meta.endpoint()).unwrap();
         }
 
         let socket = sockets.get_mut::<tcp::Socket>(tcp_handle);

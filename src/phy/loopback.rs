@@ -8,6 +8,8 @@ use crate::phy::{self, Device, DeviceCapabilities, Medium};
 use crate::time::Instant;
 use crate::Result;
 
+use super::PacketId;
+
 /// A loopback device.
 #[derive(Debug)]
 pub struct Loopback {
@@ -41,7 +43,10 @@ impl<'a> Device<'a> for Loopback {
         }
     }
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(
+        &'a mut self,
+        _tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
         self.queue.pop_front().map(move |buffer| {
             let rx = RxToken { buffer };
             let tx = TxToken {
@@ -51,7 +56,7 @@ impl<'a> Device<'a> for Loopback {
         })
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
         Some(TxToken {
             queue: &mut self.queue,
         })

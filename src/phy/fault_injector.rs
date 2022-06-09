@@ -4,6 +4,8 @@ use crate::phy::{self, Device, DeviceCapabilities};
 use crate::time::{Duration, Instant};
 use crate::{Error, Result};
 
+use super::PacketId;
+
 // We use our own RNG to stay compatible with #![no_std].
 // The use of the RNG below has a slight bias, but it doesn't matter.
 fn xorshift32(state: &mut u32) -> u32 {
@@ -210,13 +212,16 @@ where
         caps
     }
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(
+        &'a mut self,
+        tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
         let &mut Self {
             ref mut inner,
             ref state,
             config,
         } = self;
-        inner.receive().map(|(rx_token, tx_token)| {
+        inner.receive(tx_packet_id).map(|(rx_token, tx_token)| {
             let rx = RxToken {
                 state,
                 config,
@@ -233,13 +238,13 @@ where
         })
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, timestamp_id: Option<PacketId>) -> Option<Self::TxToken> {
         let &mut Self {
             ref mut inner,
             ref state,
             config,
         } = self;
-        inner.transmit().map(|token| TxToken {
+        inner.transmit(timestamp_id).map(|token| TxToken {
             state,
             config,
             token,
