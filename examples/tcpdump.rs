@@ -10,7 +10,7 @@ fn main() {
     let mut socket = RawSocket::new(ifname.as_ref(), smoltcp::phy::Medium::Ethernet).unwrap();
     loop {
         phy_wait(socket.as_raw_fd(), None).unwrap();
-        let (rx_token, _) = socket.receive().unwrap();
+        let (rx_token, _) = socket.receive(None).unwrap();
         rx_token
             .consume(Instant::now(), |buffer| {
                 println!(

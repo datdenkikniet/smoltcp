@@ -7,6 +7,8 @@ use crate::{
     Result,
 };
 
+use super::PacketId;
+
 /// A tracer device.
 ///
 /// A tracer is a device that pretty prints all packets traversing it
@@ -55,14 +57,17 @@ where
         self.inner.capabilities()
     }
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(
+        &'a mut self,
+        tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
         let &mut Self {
             ref mut inner,
             writer,
             ..
         } = self;
         let medium = inner.capabilities().medium;
-        inner.receive().map(|(rx_token, tx_token)| {
+        inner.receive(tx_packet_id).map(|(rx_token, tx_token)| {
             let rx = RxToken {
                 token: rx_token,
                 writer,
@@ -77,13 +82,13 @@ where
         })
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken> {
         let &mut Self {
             ref mut inner,
             writer,
         } = self;
         let medium = inner.capabilities().medium;
-        inner.transmit().map(|tx_token| TxToken {
+        inner.transmit(packet_id).map(|tx_token| TxToken {
             token: tx_token,
             medium,
             writer,

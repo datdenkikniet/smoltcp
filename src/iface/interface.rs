@@ -11,7 +11,9 @@ use super::socket_set::SocketSet;
 use crate::iface::Routes;
 #[cfg(any(feature = "medium-ethernet", feature = "medium-ieee802154"))]
 use crate::iface::{NeighborAnswer, NeighborCache};
-use crate::phy::{ChecksumCapabilities, Device, DeviceCapabilities, Medium, RxToken, TxToken};
+use crate::phy::{
+    ChecksumCapabilities, Device, DeviceCapabilities, Medium, PacketId, RxToken, TxToken,
+};
 use crate::rand::Rand;
 #[cfg(feature = "socket-dhcpv4")]
 use crate::socket::dhcpv4;
@@ -151,6 +153,8 @@ pub struct Interface<'a> {
 pub struct InterfaceInner<'a> {
     caps: DeviceCapabilities,
     now: Instant,
+
+    packet_counter: usize,
 
     #[cfg(any(feature = "medium-ethernet", feature = "medium-ieee802154"))]
     neighbor_cache: Option<NeighborCache<'a>>,
@@ -511,6 +515,7 @@ let iface = builder.finalize(&mut device);
             inner: InterfaceInner {
                 now: Instant::from_secs(0),
                 caps,
+                packet_counter: 0,
                 #[cfg(any(feature = "medium-ethernet", feature = "medium-ieee802154"))]
                 hardware_addr,
                 ip_addrs: self.ip_addrs,
@@ -764,7 +769,7 @@ impl<'a> Interface<'a> {
                 } else if let Some(pkt) = self.inner.igmp_report_packet(IgmpVersion::Version2, addr)
                 {
                     // Send initial membership report
-                    let tx_token = device.transmit().ok_or(Error::Exhausted)?;
+                    let tx_token = device.transmit(None).ok_or(Error::Exhausted)?;
                     self.inner.dispatch_ip(tx_token, pkt, None)?;
                     Ok(true)
                 } else {
@@ -800,7 +805,7 @@ impl<'a> Interface<'a> {
                     Ok(false)
                 } else if let Some(pkt) = self.inner.igmp_leave_packet(addr) {
                     // Send group leave packet
-                    let tx_token = device.transmit().ok_or(Error::Exhausted)?;
+                    let tx_token = device.transmit(None).ok_or(Error::Exhausted)?;
                     self.inner.dispatch_ip(tx_token, pkt, None)?;
                     Ok(true)
                 } else {
@@ -993,51 +998,57 @@ impl<'a> Interface<'a> {
         let mut processed_any = false;
         let Self {
             inner,
-            fragments: ref mut _fragments,
-            out_packets: _out_packets,
+            fragments,
+            out_packets,
         } = self;
 
-        while let Some((rx_token, tx_token)) = device.receive() {
-            let res = rx_token.consume(inner.now, |frame| {
-                match inner.caps.medium {
-                    #[cfg(feature = "medium-ethernet")]
-                    Medium::Ethernet => {
-                        if let Some(packet) = inner.process_ethernet(sockets, &frame, _fragments) {
-                            if let Err(err) = inner.dispatch(tx_token, packet) {
-                                net_debug!("Failed to send response: {}", err);
-                            }
-                        }
-                    }
-                    #[cfg(feature = "medium-ip")]
-                    Medium::Ip => {
-                        if let Some(packet) = inner.process_ip(sockets, &frame, _fragments) {
-                            if let Err(err) = inner.dispatch_ip(tx_token, packet, None) {
-                                net_debug!("Failed to send response: {}", err);
-                            }
-                        }
-                    }
-                    #[cfg(feature = "medium-ieee802154")]
-                    Medium::Ieee802154 => {
-                        if let Some(packet) = inner.process_ieee802154(sockets, &frame, _fragments)
-                        {
-                            if let Err(err) =
-                                inner.dispatch_ip(tx_token, packet, Some(_out_packets))
-                            {
-                                net_debug!("Failed to send response: {}", err);
-                            }
-                        }
-                    }
-                }
-                processed_any = true;
-                Ok(())
-            });
+        loop {
+            let tx_packet_id = inner.next_packet_id();
 
-            if let Err(err) = res {
-                net_debug!("Failed to consume RX token: {}", err);
+            if let Some((rx_token, tx_token)) = device.receive(Some(tx_packet_id)) {
+                let res = rx_token.consume(inner.now, |frame| {
+                    match inner.caps.medium {
+                        #[cfg(feature = "medium-ethernet")]
+                        Medium::Ethernet => {
+                            if let Some(packet) = inner.process_ethernet(sockets, &frame, fragments)
+                            {
+                                if let Err(err) = inner.dispatch(tx_token, packet) {
+                                    net_debug!("Failed to send response: {}", err);
+                                }
+                            }
+                        }
+                        #[cfg(feature = "medium-ip")]
+                        Medium::Ip => {
+                            if let Some(packet) = inner.process_ip(sockets, &frame, fragments) {
+                                if let Err(err) = inner.dispatch_ip(tx_token, packet, None) {
+                                    net_debug!("Failed to send response: {}", err);
+                                }
+                            }
+                        }
+                        #[cfg(feature = "medium-ieee802154")]
+                        Medium::Ieee802154 => {
+                            if let Some(packet) =
+                                inner.process_ieee802154(sockets, &frame, fragments)
+                            {
+                                if let Err(err) =
+                                    inner.dispatch_ip(tx_token, packet, Some(out_packets))
+                                {
+                                    net_debug!("Failed to send response: {}", err);
+                                }
+                            }
+                        }
+                    }
+                    processed_any = true;
+                    Ok(())
+                });
+
+                if let Err(err) = res {
+                    net_debug!("Failed to consume RX token: {}", err);
+                }
+            } else {
+                break processed_any;
             }
         }
-
-        processed_any
     }
 
     fn socket_egress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
@@ -1061,62 +1072,64 @@ impl<'a> Interface<'a> {
             }
 
             let mut neighbor_addr = None;
-            let mut respond = |inner: &mut InterfaceInner, response: IpPacket| {
-                neighbor_addr = Some(response.ip_repr().dst_addr());
-                match device.transmit().ok_or(Error::Exhausted) {
-                    Ok(_t) => {
-                        #[cfg(feature = "proto-sixlowpan-fragmentation")]
-                        if let Err(_e) = inner.dispatch_ip(_t, response, Some(_out_packets)) {
-                            net_debug!("failed to dispatch IP: {}", _e);
+            let mut respond =
+                |inner: &mut InterfaceInner, response: IpPacket, packet_id: Option<PacketId>| {
+                    neighbor_addr = Some(response.ip_repr().dst_addr());
+                    match device.transmit(packet_id).ok_or(Error::Exhausted) {
+                        Ok(t) => {
+                            #[cfg(feature = "proto-sixlowpan-fragmentation")]
+                            if let Err(_e) = inner.dispatch_ip(t, response, Some(_out_packets)) {
+                                net_debug!("failed to dispatch IP: {}", _e);
+                            }
+                            #[cfg(not(feature = "proto-sixlowpan-fragmentation"))]
+                            if let Err(_e) = inner.dispatch_ip(t, response, None) {
+                                net_debug!("failed to dispatch IP: {}", _e);
+                            }
+                            emitted_any = true;
                         }
-
-                        #[cfg(not(feature = "proto-sixlowpan-fragmentation"))]
-                        if let Err(_e) = inner.dispatch_ip(_t, response, None) {
-                            net_debug!("failed to dispatch IP: {}", _e);
+                        Err(e) => {
+                            net_debug!("failed to transmit IP: {}", e);
                         }
-                        emitted_any = true;
                     }
-                    Err(e) => {
-                        net_debug!("failed to transmit IP: {}", e);
-                    }
-                }
 
-                Ok(())
-            };
+                    Ok(())
+                };
 
             let result = match &mut item.socket {
                 #[cfg(feature = "socket-raw")]
                 Socket::Raw(socket) => socket.dispatch(inner, |inner, response| {
-                    respond(inner, IpPacket::Raw(response))
+                    respond(inner, IpPacket::Raw(response), None)
                 }),
                 #[cfg(feature = "socket-icmp")]
                 Socket::Icmp(socket) => socket.dispatch(inner, |inner, response| match response {
                     #[cfg(feature = "proto-ipv4")]
                     (IpRepr::Ipv4(ipv4_repr), IcmpRepr::Ipv4(icmpv4_repr)) => {
-                        respond(inner, IpPacket::Icmpv4((ipv4_repr, icmpv4_repr)))
+                        respond(inner, IpPacket::Icmpv4((ipv4_repr, icmpv4_repr)), None)
                     }
                     #[cfg(feature = "proto-ipv6")]
                     (IpRepr::Ipv6(ipv6_repr), IcmpRepr::Ipv6(icmpv6_repr)) => {
-                        respond(inner, IpPacket::Icmpv6((ipv6_repr, icmpv6_repr)))
+                        respond(inner, IpPacket::Icmpv6((ipv6_repr, icmpv6_repr)), None)
                     }
                     #[allow(unreachable_patterns)]
                     _ => unreachable!(),
                 }),
                 #[cfg(feature = "socket-udp")]
-                Socket::Udp(socket) => socket.dispatch(inner, |inner, response| {
-                    respond(inner, IpPacket::Udp(response))
-                }),
+                Socket::Udp(socket) => {
+                    socket.dispatch(inner, |inner, (packet_id, ip_repr, udp_repr, data)| {
+                        respond(inner, IpPacket::Udp((ip_repr, udp_repr, data)), packet_id)
+                    })
+                }
                 #[cfg(feature = "socket-tcp")]
                 Socket::Tcp(socket) => socket.dispatch(inner, |inner, response| {
-                    respond(inner, IpPacket::Tcp(response))
+                    respond(inner, IpPacket::Tcp(response), None)
                 }),
                 #[cfg(feature = "socket-dhcpv4")]
                 Socket::Dhcpv4(socket) => socket.dispatch(inner, |inner, response| {
-                    respond(inner, IpPacket::Dhcpv4(response))
+                    respond(inner, IpPacket::Dhcpv4(response), None)
                 }),
                 #[cfg(feature = "socket-dns")]
                 Socket::Dns(ref mut socket) => socket.dispatch(inner, |inner, response| {
-                    respond(inner, IpPacket::Udp(response))
+                    respond(inner, IpPacket::Udp(response), None)
                 }),
             };
 
@@ -1161,7 +1174,7 @@ impl<'a> Interface<'a> {
             } if self.inner.now >= timeout => {
                 if let Some(pkt) = self.inner.igmp_report_packet(version, group) {
                     // Send initial membership report
-                    let tx_token = device.transmit().ok_or(Error::Exhausted)?;
+                    let tx_token = device.transmit(None).ok_or(Error::Exhausted)?;
                     self.inner.dispatch_ip(tx_token, pkt, None)?;
                 }
 
@@ -1185,7 +1198,7 @@ impl<'a> Interface<'a> {
                     Some(addr) => {
                         if let Some(pkt) = self.inner.igmp_report_packet(version, addr) {
                             // Send initial membership report
-                            let tx_token = device.transmit().ok_or(Error::Exhausted)?;
+                            let tx_token = device.transmit(None).ok_or(Error::Exhausted)?;
                             self.inner.dispatch_ip(tx_token, pkt, None)?;
                         }
 
@@ -1224,8 +1237,10 @@ impl<'a> Interface<'a> {
             return Ok(false);
         }
 
+        let tx_packet_id = self.inner.next_packet_id();
+
         if *packet_len >= *sent_bytes {
-            match device.transmit().ok_or(Error::Exhausted) {
+            match device.transmit(Some(tx_packet_id)).ok_or(Error::Exhausted) {
                 Ok(tx_token) => {
                     if let Err(e) = self.inner.dispatch_ieee802154_out_packet(
                         tx_token,
@@ -1251,6 +1266,15 @@ impl<'a> Interface<'a> {
 }
 
 impl<'a> InterfaceInner<'a> {
+    /// This will never panic, as `usize::MAX` and `1` are valid values for NonZeroUsize,
+    /// and X + 1, where 1 <= X < usize::MAX is also a valid NonZeroUsize
+    #[allow(unused)]
+    pub fn next_packet_id(&mut self) -> PacketId {
+        let id = PacketId::new(self.packet_counter);
+        self.packet_counter.wrapping_add(1);
+        id
+    }
+
     #[allow(unused)] // unused depending on which sockets are enabled
     pub(crate) fn now(&self) -> Instant {
         self.now
@@ -1341,9 +1365,10 @@ impl<'a> InterfaceInner<'a> {
                 max_transmission_unit: 1514,
                 #[cfg(not(feature = "medium-ethernet"))]
                 max_transmission_unit: 1500,
+                hardware_timestamping: false,
             },
             now: Instant::from_millis_const(0),
-
+            packet_counter: 0,
             ip_addrs: ManagedSlice::Owned(vec![
                 #[cfg(feature = "proto-ipv4")]
                 IpCidr::Ipv4(Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 1), 24)),
@@ -3403,7 +3428,7 @@ mod test {
     #[cfg(feature = "proto-igmp")]
     fn recv_all(device: &mut Loopback, timestamp: Instant) -> Vec<Vec<u8>> {
         let mut pkts = Vec::new();
-        while let Some((rx, _tx)) = device.receive() {
+        while let Some((rx, _tx)) = device.receive(None) {
             rx.consume(timestamp, |pkt| {
                 pkts.push(pkt.to_vec());
                 Ok(())
@@ -3720,7 +3745,7 @@ mod test {
     #[test]
     #[cfg(feature = "socket-udp")]
     fn test_handle_udp_broadcast() {
-        use crate::wire::IpEndpoint;
+        use crate::{socket::udp::UdpMetadata, wire::IpEndpoint};
 
         static UDP_PAYLOAD: [u8; 5] = [0x48, 0x65, 0x6c, 0x6c, 0x6f];
 
@@ -3792,7 +3817,10 @@ mod test {
         assert!(socket.can_recv());
         assert_eq!(
             socket.recv(),
-            Ok((&UDP_PAYLOAD[..], IpEndpoint::new(src_ip.into(), 67)))
+            Ok((
+                &UDP_PAYLOAD[..],
+                UdpMetadata::unmarked(IpEndpoint::new(src_ip.into(), 67))
+            ))
         );
     }
 
@@ -4452,7 +4480,7 @@ mod test {
         ];
         {
             // Transmit GENERAL_QUERY_BYTES into loopback
-            let tx_token = device.transmit().unwrap();
+            let tx_token = device.transmit(None).unwrap();
             tx_token
                 .consume(timestamp, GENERAL_QUERY_BYTES.len(), |buffer| {
                     buffer.copy_from_slice(GENERAL_QUERY_BYTES);
@@ -4561,7 +4589,10 @@ mod test {
     #[test]
     #[cfg(all(feature = "proto-ipv4", feature = "socket-raw", feature = "socket-udp"))]
     fn test_raw_socket_with_udp_socket() {
-        use crate::wire::{IpEndpoint, IpVersion, Ipv4Packet, UdpPacket, UdpRepr};
+        use crate::{
+            socket::udp::UdpMetadata,
+            wire::{IpEndpoint, IpVersion, Ipv4Packet, UdpPacket, UdpRepr},
+        };
 
         static UDP_PAYLOAD: [u8; 5] = [0x48, 0x65, 0x6c, 0x6c, 0x6f];
 
@@ -4654,7 +4685,10 @@ mod test {
         assert!(socket.can_recv());
         assert_eq!(
             socket.recv(),
-            Ok((&UDP_PAYLOAD[..], IpEndpoint::new(src_addr.into(), 67)))
+            Ok((
+                &UDP_PAYLOAD[..],
+                UdpMetadata::unmarked(IpEndpoint::new(src_addr.into(), 67))
+            ))
         );
     }
 }

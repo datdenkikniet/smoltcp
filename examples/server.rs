@@ -119,13 +119,13 @@ fn main() {
             }
             Err(_) => None,
         };
-        if let Some(endpoint) = client {
+        if let Some(meta) = client {
             let data = b"hello\n";
             debug!(
                 "udp:6969 send data: {:?}",
                 str::from_utf8(data.as_ref()).unwrap()
             );
-            socket.send_slice(data, endpoint).unwrap();
+            socket.send_slice(data, meta.endpoint()).unwrap();
         }
 
         // tcp:6969: respond "hello"

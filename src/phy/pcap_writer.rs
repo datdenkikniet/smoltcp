@@ -8,6 +8,8 @@ use crate::phy::{self, Device, DeviceCapabilities};
 use crate::time::Instant;
 use crate::Result;
 
+use super::PacketId;
+
 enum_with_unknown! {
     /// Captured packet header type.
     pub enum PcapLinkType(u32) {
@@ -174,29 +176,34 @@ where
         self.lower.capabilities()
     }
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        let sink = &self.sink;
-        let mode = self.mode;
-        self.lower.receive().map(move |(rx_token, tx_token)| {
-            let rx = RxToken {
-                token: rx_token,
-                sink,
-                mode,
-            };
-            let tx = TxToken {
-                token: tx_token,
-                sink,
-                mode,
-            };
-            (rx, tx)
-        })
-    }
-
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn receive(
+        &'a mut self,
+        tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
         let sink = &self.sink;
         let mode = self.mode;
         self.lower
-            .transmit()
+            .receive(tx_packet_id)
+            .map(move |(rx_token, tx_token)| {
+                let rx = RxToken {
+                    token: rx_token,
+                    sink,
+                    mode,
+                };
+                let tx = TxToken {
+                    token: tx_token,
+                    sink,
+                    mode,
+                };
+                (rx, tx)
+            })
+    }
+
+    fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken> {
+        let sink = &self.sink;
+        let mode = self.mode;
+        self.lower
+            .transmit(packet_id)
             .map(move |token| TxToken { token, sink, mode })
     }
 }
