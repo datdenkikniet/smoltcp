@@ -330,7 +330,7 @@ impl<'a> Socket<'a> {
             .tx_buffer
             .enqueue(
                 size,
-                UdpMetadata::marked(remote_endpoint, packet_id.copy_of()),
+                UdpMetadata::marked(remote_endpoint, packet_id.clone()),
             )
             .map_err(|_| SendError::BufferFull)?;
 
@@ -555,7 +555,7 @@ impl<'a> Socket<'a> {
             emit(
                 cx,
                 (
-                    packet_meta.packet_id.as_ref().map(|v| v.copy_of()),
+                    packet_meta.packet_id.as_ref().cloned(),
                     ip_repr,
                     repr,
                     payload_buf,
