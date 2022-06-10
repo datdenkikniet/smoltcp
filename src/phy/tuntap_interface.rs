@@ -56,6 +56,7 @@ impl<'a> Device<'a> for TunTapInterface {
 
     fn receive(
         &'a mut self,
+        _rx_packet_id: Option<PacketId>,
         _tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let mut lower = self.lower.borrow_mut();

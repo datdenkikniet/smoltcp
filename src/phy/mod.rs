@@ -42,11 +42,16 @@ impl<'a> phy::Device<'a> for StmPhy {
     type RxToken = StmPhyRxToken<'a>;
     type TxToken = StmPhyTxToken<'a>;
 
-    fn receive(&'a mut self, _tx_packet_id: Option<PacketId>) -> Option<(Self::RxToken, Self::TxToken)> {
-        Some((StmPhyRxToken(&mut self.rx_buffer[..]),
-              StmPhyTxToken(&mut self.tx_buffer[..])))
+    fn receive(
+        &'a mut self,
+        _rx_packet_id: Option<PacketId>,
+        _tx_packet_id: Option<PacketId>,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
+        Some((
+            StmPhyRxToken(&mut self.rx_buffer[..]),
+            StmPhyTxToken(&mut self.tx_buffer[..]),
+        ))
     }
-
     fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
         Some(StmPhyTxToken(&mut self.tx_buffer[..]))
     }
@@ -341,6 +346,7 @@ pub trait Device<'a> {
     /// need to be sent back, without heap allocation.
     fn receive(
         &'a mut self,
+        rx_packet_id: Option<PacketId>,
         tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)>;
 

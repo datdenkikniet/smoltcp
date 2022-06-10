@@ -59,6 +59,7 @@ where
 
     fn receive(
         &'a mut self,
+        rx_packet_id: Option<PacketId>,
         tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let &mut Self {
@@ -67,19 +68,21 @@ where
             ..
         } = self;
         let medium = inner.capabilities().medium;
-        inner.receive(tx_packet_id).map(|(rx_token, tx_token)| {
-            let rx = RxToken {
-                token: rx_token,
-                writer,
-                medium,
-            };
-            let tx = TxToken {
-                token: tx_token,
-                writer,
-                medium,
-            };
-            (rx, tx)
-        })
+        inner
+            .receive(rx_packet_id, tx_packet_id)
+            .map(|(rx_token, tx_token)| {
+                let rx = RxToken {
+                    token: rx_token,
+                    writer,
+                    medium,
+                };
+                let tx = TxToken {
+                    token: tx_token,
+                    writer,
+                    medium,
+                };
+                (rx, tx)
+            })
     }
 
     fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken> {
