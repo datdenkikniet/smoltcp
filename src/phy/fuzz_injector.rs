@@ -63,6 +63,7 @@ where
 
     fn receive(
         &'a mut self,
+        rx_packet_id: Option<PacketId>,
         tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let &mut Self {
@@ -70,17 +71,19 @@ where
             ref fuzz_rx,
             ref fuzz_tx,
         } = self;
-        inner.receive(tx_packet_id).map(|(rx_token, tx_token)| {
-            let rx = RxToken {
-                fuzzer: fuzz_rx,
-                token: rx_token,
-            };
-            let tx = TxToken {
-                fuzzer: fuzz_tx,
-                token: tx_token,
-            };
-            (rx, tx)
-        })
+        inner
+            .receive(rx_packet_id, tx_packet_id)
+            .map(|(rx_token, tx_token)| {
+                let rx = RxToken {
+                    fuzzer: fuzz_rx,
+                    token: rx_token,
+                };
+                let tx = TxToken {
+                    fuzzer: fuzz_tx,
+                    token: tx_token,
+                };
+                (rx, tx)
+            })
     }
 
     fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken> {

@@ -178,12 +178,13 @@ where
 
     fn receive(
         &'a mut self,
+        rx_packet_id: Option<PacketId>,
         tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let sink = &self.sink;
         let mode = self.mode;
         self.lower
-            .receive(tx_packet_id)
+            .receive(rx_packet_id, tx_packet_id)
             .map(move |(rx_token, tx_token)| {
                 let rx = RxToken {
                     token: rx_token,

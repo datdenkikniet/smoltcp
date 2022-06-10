@@ -10,6 +10,7 @@ use crate::socket::WakerRegistration;
 use crate::storage::Empty;
 use crate::wire::{IpEndpoint, IpListenEndpoint, IpProtocol, IpRepr, UdpRepr};
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, PartialEq)]
 pub struct UdpMetadata {
     packet_id: Option<PacketId>,
@@ -33,6 +34,10 @@ impl Clone for UdpMetadata {
 impl UdpMetadata {
     pub fn endpoint(&self) -> IpEndpoint {
         self.endpoint
+    }
+
+    pub fn packet_id(&self) -> &Option<PacketId> {
+        &self.packet_id
     }
 }
 
@@ -474,6 +479,7 @@ impl<'a> Socket<'a> {
     pub(crate) fn process(
         &mut self,
         cx: &mut Context,
+        packet_id: Option<PacketId>,
         ip_repr: &IpRepr,
         repr: &UdpRepr,
         payload: &[u8],
@@ -494,10 +500,12 @@ impl<'a> Socket<'a> {
             size
         );
 
-        match self
-            .rx_buffer
-            .enqueue(size, UdpMetadata::unmarked(remote_endpoint))
-        {
+        let metadata = UdpMetadata {
+            endpoint: remote_endpoint,
+            packet_id,
+        };
+
+        match self.rx_buffer.enqueue(size, metadata) {
             Ok(buf) => buf.copy_from_slice(payload),
             Err(_) => net_trace!(
                 "udp:{}:{}: buffer full, dropped incoming packet",
@@ -779,11 +787,11 @@ mod test {
         assert_eq!(socket.recv(), Err(RecvError::Exhausted));
 
         assert!(socket.accepts(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR));
-        socket.process(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
         assert!(socket.can_recv());
 
         assert!(socket.accepts(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR));
-        socket.process(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
 
         assert_eq!(
             socket.recv(),
@@ -801,7 +809,7 @@ mod test {
 
         assert_eq!(socket.peek(), Err(RecvError::Exhausted));
 
-        socket.process(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
         assert_eq!(
             socket.peek(),
             Ok((&b"abcdef"[..], &UdpMetadata::unmarked(REMOTE_END)))
@@ -821,7 +829,7 @@ mod test {
         assert_eq!(socket.bind(LOCAL_PORT), Ok(()));
 
         assert!(socket.accepts(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR));
-        socket.process(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
 
         let mut slice = [0; 4];
         assert_eq!(
@@ -838,7 +846,7 @@ mod test {
 
         assert_eq!(socket.bind(LOCAL_PORT), Ok(()));
 
-        socket.process(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
 
         let mut slice = [0; 4];
         assert_eq!(
@@ -933,7 +941,7 @@ mod test {
             src_port: REMOTE_PORT,
             dst_port: LOCAL_PORT,
         };
-        socket.process(&mut cx, &REMOTE_IP_REPR, &repr, &[]);
+        socket.process(&mut cx, None, &REMOTE_IP_REPR, &repr, &[]);
         assert_eq!(
             socket.recv(),
             Ok((&[][..], UdpMetadata::unmarked(REMOTE_END)))

@@ -45,6 +45,7 @@ impl<'a> Device<'a> for Loopback {
 
     fn receive(
         &'a mut self,
+        _rx_packet_id: Option<PacketId>,
         _tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         self.queue.pop_front().map(move |buffer| {
