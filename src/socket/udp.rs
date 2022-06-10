@@ -11,24 +11,10 @@ use crate::storage::Empty;
 use crate::wire::{IpEndpoint, IpListenEndpoint, IpProtocol, IpRepr, UdpRepr};
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct UdpMetadata {
     packet_id: Option<PacketId>,
     endpoint: IpEndpoint,
-}
-
-#[cfg(test)]
-impl Clone for UdpMetadata {
-    fn clone(&self) -> Self {
-        if self.packet_id.is_none() {
-            Self {
-                packet_id: None,
-                endpoint: self.endpoint.clone(),
-            }
-        } else {
-            panic!("Tried to clone a timestamp ID!")
-        }
-    }
 }
 
 impl UdpMetadata {
