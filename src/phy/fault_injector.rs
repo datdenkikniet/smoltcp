@@ -214,6 +214,7 @@ where
 
     fn receive(
         &'a mut self,
+        rx_packet_id: Option<PacketId>,
         tx_packet_id: Option<PacketId>,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let &mut Self {
@@ -221,21 +222,23 @@ where
             ref state,
             config,
         } = self;
-        inner.receive(tx_packet_id).map(|(rx_token, tx_token)| {
-            let rx = RxToken {
-                state,
-                config,
-                token: rx_token,
-                corrupt: [0; MTU],
-            };
-            let tx = TxToken {
-                state,
-                config,
-                token: tx_token,
-                junk: [0; MTU],
-            };
-            (rx, tx)
-        })
+        inner
+            .receive(rx_packet_id, tx_packet_id)
+            .map(|(rx_token, tx_token)| {
+                let rx = RxToken {
+                    state,
+                    config,
+                    token: rx_token,
+                    corrupt: [0; MTU],
+                };
+                let tx = TxToken {
+                    state,
+                    config,
+                    token: tx_token,
+                    junk: [0; MTU],
+                };
+                (rx, tx)
+            })
     }
 
     fn transmit(&'a mut self, timestamp_id: Option<PacketId>) -> Option<Self::TxToken> {
