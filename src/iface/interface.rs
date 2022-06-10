@@ -1003,22 +1003,17 @@ impl<'a> Interface<'a> {
         } = self;
 
         loop {
-            let tx_packet_id = inner.next_packet_id();
-            let rx_packet_id = inner.next_packet_id();
+            let tx_packet_id = Some(inner.next_packet_id());
+            let rx_packet_id = Some(inner.next_packet_id());
 
-            if let Some((rx_token, tx_token)) =
-                device.receive(Some(rx_packet_id.clone()), Some(tx_packet_id))
-            {
+            if let Some((rx_token, tx_token)) = device.receive(rx_packet_id.clone(), tx_packet_id) {
                 let res = rx_token.consume(inner.now, |frame| {
                     match inner.caps.medium {
                         #[cfg(feature = "medium-ethernet")]
                         Medium::Ethernet => {
-                            if let Some(packet) = inner.process_ethernet(
-                                Some(rx_packet_id),
-                                sockets,
-                                &frame,
-                                fragments,
-                            ) {
+                            if let Some(packet) =
+                                inner.process_ethernet(rx_packet_id, sockets, &frame, fragments)
+                            {
                                 if let Err(err) = inner.dispatch(tx_token, packet) {
                                     net_debug!("Failed to send response: {}", err);
                                 }
@@ -1027,7 +1022,7 @@ impl<'a> Interface<'a> {
                         #[cfg(feature = "medium-ip")]
                         Medium::Ip => {
                             if let Some(packet) =
-                                inner.process_ip(Some(rx_packet_id), sockets, &frame, fragments)
+                                inner.process_ip(rx_packet_id, sockets, &frame, fragments)
                             {
                                 if let Err(err) = inner.dispatch_ip(tx_token, packet, None) {
                                     net_debug!("Failed to send response: {}", err);
@@ -1246,10 +1241,10 @@ impl<'a> Interface<'a> {
             return Ok(false);
         }
 
-        let tx_packet_id = self.inner.next_packet_id();
+        let tx_packet_id = Some(self.inner.next_packet_id());
 
         if *packet_len >= *sent_bytes {
-            match device.transmit(Some(tx_packet_id)).ok_or(Error::Exhausted) {
+            match device.transmit(tx_packet_id).ok_or(Error::Exhausted) {
                 Ok(tx_token) => {
                     if let Err(e) = self.inner.dispatch_ieee802154_out_packet(
                         tx_token,
