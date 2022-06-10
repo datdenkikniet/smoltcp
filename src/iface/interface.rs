@@ -1284,12 +1284,10 @@ impl<'a> Interface<'a> {
 }
 
 impl<'a> InterfaceInner<'a> {
-    /// This will never panic, as `usize::MAX` and `1` are valid values for NonZeroUsize,
-    /// and X + 1, where 1 <= X < usize::MAX is also a valid NonZeroUsize
     #[allow(unused)]
-    pub fn next_packet_id(&mut self) -> PacketId {
+    pub(crate) fn next_packet_id(&mut self) -> PacketId {
         let id = PacketId::new(self.packet_counter);
-        self.packet_counter.wrapping_add(1);
+        self.packet_counter = self.packet_counter.wrapping_add(1);
         id
     }
 
