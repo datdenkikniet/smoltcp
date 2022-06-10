@@ -12,7 +12,7 @@ use crate::iface::Routes;
 #[cfg(any(feature = "medium-ethernet", feature = "medium-ieee802154"))]
 use crate::iface::{NeighborAnswer, NeighborCache};
 use crate::phy::{
-    ChecksumCapabilities, Device, DeviceCapabilities, Medium, PacketId, RxToken, TxToken,
+    ChecksumCapabilities, MarkingDevice, DeviceCapabilities, Medium, PacketId, RxToken, TxToken,
 };
 use crate::rand::Rand;
 #[cfg(feature = "socket-dhcpv4")]
@@ -386,7 +386,7 @@ let iface = builder.finalize(&mut device);
     /// [neighbor_cache]: #method.neighbor_cache
     pub fn finalize<D>(self, device: &mut D) -> Interface<'a>
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         let caps = device.capabilities();
 
@@ -720,7 +720,7 @@ impl<'a> Interface<'a> {
         timestamp: Instant,
     ) -> Result<bool>
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         self.inner.now = timestamp;
 
@@ -764,7 +764,7 @@ impl<'a> Interface<'a> {
         timestamp: Instant,
     ) -> Result<bool>
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         self.inner.now = timestamp;
 
@@ -865,7 +865,7 @@ impl<'a> Interface<'a> {
         sockets: &mut SocketSet<'_>,
     ) -> Result<bool>
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         self.inner.now = timestamp;
 
@@ -960,7 +960,7 @@ impl<'a> Interface<'a> {
 
     fn socket_ingress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         let mut processed_any = false;
         let Self {
@@ -1025,7 +1025,7 @@ impl<'a> Interface<'a> {
 
     fn socket_egress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         let Self {
             inner,
@@ -1143,7 +1143,7 @@ impl<'a> Interface<'a> {
     #[cfg(feature = "proto-igmp")]
     fn igmp_egress<D>(&mut self, device: &mut D) -> Result<bool>
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         match self.inner.igmp_report_state {
             IgmpReportState::ToSpecificQuery {
@@ -1206,7 +1206,7 @@ impl<'a> Interface<'a> {
     #[cfg(feature = "proto-sixlowpan-fragmentation")]
     fn sixlowpan_egress<D>(&mut self, device: &mut D) -> Result<bool>
     where
-        D: for<'d> Device<'d>,
+        D: for<'d> MarkingDevice<'d>,
     {
         let SixlowpanOutPacket {
             packet_len,

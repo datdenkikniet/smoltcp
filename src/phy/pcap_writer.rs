@@ -4,7 +4,7 @@ use phy::Medium;
 #[cfg(feature = "std")]
 use std::io::Write;
 
-use crate::phy::{self, Device, DeviceCapabilities};
+use crate::phy::{self, MarkingDevice, DeviceCapabilities};
 use crate::time::Instant;
 use crate::Result;
 
@@ -120,7 +120,7 @@ impl<T: Write> PcapSink for T {
 #[derive(Debug)]
 pub struct PcapWriter<D, S>
 where
-    D: for<'a> Device<'a>,
+    D: for<'a> MarkingDevice<'a>,
     S: PcapSink,
 {
     lower: D,
@@ -128,7 +128,7 @@ where
     mode: PcapMode,
 }
 
-impl<D: for<'a> Device<'a>, S: PcapSink> PcapWriter<D, S> {
+impl<D: for<'a> MarkingDevice<'a>, S: PcapSink> PcapWriter<D, S> {
     /// Creates a packet capture writer.
     pub fn new(lower: D, mut sink: S, mode: PcapMode) -> PcapWriter<D, S> {
         let medium = lower.capabilities().medium;
@@ -164,13 +164,13 @@ impl<D: for<'a> Device<'a>, S: PcapSink> PcapWriter<D, S> {
     }
 }
 
-impl<'a, D, S> Device<'a> for PcapWriter<D, S>
+impl<'a, D, S> MarkingDevice<'a> for PcapWriter<D, S>
 where
-    D: for<'b> Device<'b>,
+    D: for<'b> MarkingDevice<'b>,
     S: PcapSink + 'a,
 {
-    type RxToken = RxToken<'a, <D as Device<'a>>::RxToken, S>;
-    type TxToken = TxToken<'a, <D as Device<'a>>::TxToken, S>;
+    type RxToken = RxToken<'a, <D as MarkingDevice<'a>>::RxToken, S>;
+    type TxToken = TxToken<'a, <D as MarkingDevice<'a>>::TxToken, S>;
 
     fn capabilities(&self) -> DeviceCapabilities {
         self.lower.capabilities()

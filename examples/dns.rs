@@ -8,7 +8,7 @@ extern crate smoltcp;
 mod utils;
 
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes, SocketSet};
-use smoltcp::phy::Device;
+use smoltcp::phy::MarkingDevice;
 use smoltcp::phy::{wait as phy_wait, Medium};
 use smoltcp::socket::dns::{self, GetQueryResultError};
 use smoltcp::time::Instant;

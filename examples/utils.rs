@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(feature = "phy-tuntap_interface")]
 use smoltcp::phy::TunTapInterface;
-use smoltcp::phy::{Device, FaultInjector, Medium, Tracer};
+use smoltcp::phy::{MarkingDevice, FaultInjector, Medium, Tracer};
 use smoltcp::phy::{PcapMode, PcapWriter};
 use smoltcp::time::{Duration, Instant};
 
@@ -159,7 +159,7 @@ pub fn parse_middleware_options<D>(
     loopback: bool,
 ) -> FaultInjector<Tracer<PcapWriter<D, Box<dyn io::Write>>>>
 where
-    D: for<'a> Device<'a>,
+    D: for<'a> MarkingDevice<'a>,
 {
     let drop_chance = matches
         .opt_str("drop-chance")

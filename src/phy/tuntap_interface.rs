@@ -4,7 +4,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::rc::Rc;
 use std::vec::Vec;
 
-use crate::phy::{self, sys, Device, DeviceCapabilities, Medium};
+use crate::phy::{self, sys, MarkingDevice, DeviceCapabilities, Medium};
 use crate::time::Instant;
 use crate::Result;
 
@@ -42,7 +42,7 @@ impl TunTapInterface {
     }
 }
 
-impl<'a> Device<'a> for TunTapInterface {
+impl<'a> MarkingDevice<'a> for TunTapInterface {
     type RxToken = RxToken;
     type TxToken = TxToken;
 

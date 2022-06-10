@@ -12,7 +12,7 @@ use std::str::{self, FromStr};
 use smoltcp::iface::FragmentsCache;
 
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes, SocketSet};
-use smoltcp::phy::{wait as phy_wait, Device, Medium};
+use smoltcp::phy::{wait as phy_wait, MarkingDevice, Medium};
 use smoltcp::socket::tcp;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};

@@ -10,7 +10,7 @@ use smoltcp::socket::dhcpv4;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpCidr, Ipv4Address, Ipv4Cidr};
 use smoltcp::{
-    phy::{wait as phy_wait, Device, Medium},
+    phy::{wait as phy_wait, MarkingDevice, Medium},
     time::Duration,
 };
 

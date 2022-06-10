@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::phy::{self, Device, DeviceCapabilities, Medium};
+use crate::phy::{self, MarkingDevice, DeviceCapabilities, Medium};
 use crate::time::Instant;
 use crate::{
     wire::pretty_print::{PrettyIndent, PrettyPrint},
@@ -14,12 +14,12 @@ use super::PacketId;
 /// A tracer is a device that pretty prints all packets traversing it
 /// using the provided writer function, and then passes them to another
 /// device.
-pub struct Tracer<D: for<'a> Device<'a>> {
+pub struct Tracer<D: for<'a> MarkingDevice<'a>> {
     inner: D,
     writer: fn(Instant, Packet),
 }
 
-impl<D: for<'a> Device<'a>> Tracer<D> {
+impl<D: for<'a> MarkingDevice<'a>> Tracer<D> {
     /// Create a tracer device.
     pub fn new(inner: D, writer: fn(timestamp: Instant, packet: Packet)) -> Tracer<D> {
         Tracer { inner, writer }
@@ -46,12 +46,12 @@ impl<D: for<'a> Device<'a>> Tracer<D> {
     }
 }
 
-impl<'a, D> Device<'a> for Tracer<D>
+impl<'a, D> MarkingDevice<'a> for Tracer<D>
 where
-    D: for<'b> Device<'b>,
+    D: for<'b> MarkingDevice<'b>,
 {
-    type RxToken = RxToken<<D as Device<'a>>::RxToken>;
-    type TxToken = TxToken<<D as Device<'a>>::TxToken>;
+    type RxToken = RxToken<<D as MarkingDevice<'a>>::RxToken>;
+    type TxToken = TxToken<<D as MarkingDevice<'a>>::TxToken>;
 
     fn capabilities(&self) -> DeviceCapabilities {
         self.inner.capabilities()

@@ -4,11 +4,11 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::rc::Rc;
 use std::vec::Vec;
 
-use crate::phy::{self, sys, Device, DeviceCapabilities, Medium};
+use crate::phy::{self, sys, DeviceCapabilities, Medium};
 use crate::time::Instant;
 use crate::Result;
 
-use super::PacketId;
+use super::{MarkingDevice, PacketId};
 
 /// A socket that captures or transmits the complete frame.
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl RawSocket {
     }
 }
 
-impl<'a> Device<'a> for RawSocket {
+impl<'a> MarkingDevice<'a> for RawSocket {
     type RxToken = RxToken;
     type TxToken = TxToken;
 
@@ -78,7 +78,7 @@ impl<'a> Device<'a> for RawSocket {
 
     fn receive(
         &'a mut self,
-        _rx_packet_id: PacketId,
+        _rx_token_id: PacketId,
         _tx_packet_id: PacketId,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let mut lower = self.lower.borrow_mut();

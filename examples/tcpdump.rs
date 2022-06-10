@@ -1,5 +1,5 @@
 use smoltcp::phy::wait as phy_wait;
-use smoltcp::phy::{Device, RawSocket, RxToken};
+use smoltcp::phy::{MarkingDevice, RawSocket, RxToken};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetFrame, PrettyPrinter};
 use std::env;

@@ -1,4 +1,4 @@
-use crate::phy::{self, Device, DeviceCapabilities};
+use crate::phy::{self, MarkingDevice, DeviceCapabilities};
 use crate::time::Instant;
 use crate::Result;
 
@@ -21,14 +21,14 @@ pub trait Fuzzer {
 #[allow(unused)]
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct FuzzInjector<D: for<'a> Device<'a>, FTx: Fuzzer, FRx: Fuzzer> {
+pub struct FuzzInjector<D: for<'a> MarkingDevice<'a>, FTx: Fuzzer, FRx: Fuzzer> {
     inner: D,
     fuzz_tx: FTx,
     fuzz_rx: FRx,
 }
 
 #[allow(unused)]
-impl<D: for<'a> Device<'a>, FTx: Fuzzer, FRx: Fuzzer> FuzzInjector<D, FTx, FRx> {
+impl<D: for<'a> MarkingDevice<'a>, FTx: Fuzzer, FRx: Fuzzer> FuzzInjector<D, FTx, FRx> {
     /// Create a fuzz injector device.
     pub fn new(inner: D, fuzz_tx: FTx, fuzz_rx: FRx) -> FuzzInjector<D, FTx, FRx> {
         FuzzInjector {
@@ -44,14 +44,14 @@ impl<D: for<'a> Device<'a>, FTx: Fuzzer, FRx: Fuzzer> FuzzInjector<D, FTx, FRx> 
     }
 }
 
-impl<'a, D, FTx, FRx> Device<'a> for FuzzInjector<D, FTx, FRx>
+impl<'a, D, FTx, FRx> MarkingDevice<'a> for FuzzInjector<D, FTx, FRx>
 where
-    D: for<'b> Device<'b>,
+    D: for<'b> MarkingDevice<'b>,
     FTx: Fuzzer + 'a,
     FRx: Fuzzer + 'a,
 {
-    type RxToken = RxToken<'a, <D as Device<'a>>::RxToken, FRx>;
-    type TxToken = TxToken<'a, <D as Device<'a>>::TxToken, FTx>;
+    type RxToken = RxToken<'a, <D as MarkingDevice<'a>>::RxToken, FRx>;
+    type TxToken = TxToken<'a, <D as MarkingDevice<'a>>::TxToken, FTx>;
 
     fn capabilities(&self) -> DeviceCapabilities {
         let mut caps = self.inner.capabilities();

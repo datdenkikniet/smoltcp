@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "rust-1_28")]
 use alloc::VecDeque;
 
-use crate::phy::{self, Device, DeviceCapabilities, Medium};
+use crate::phy::{self, MarkingDevice, DeviceCapabilities, Medium};
 use crate::time::Instant;
 use crate::Result;
 
@@ -31,7 +31,7 @@ impl Loopback {
     }
 }
 
-impl<'a> Device<'a> for Loopback {
+impl<'a> MarkingDevice<'a> for Loopback {
     type RxToken = RxToken;
     type TxToken = TxToken<'a>;
 

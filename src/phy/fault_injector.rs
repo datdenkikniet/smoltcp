@@ -1,6 +1,6 @@
 use core::cell::RefCell;
 
-use crate::phy::{self, Device, DeviceCapabilities};
+use crate::phy::{self, DeviceCapabilities, MarkingDevice};
 use crate::time::{Duration, Instant};
 use crate::{Error, Result};
 
@@ -96,13 +96,13 @@ impl State {
 /// adverse network conditions (such as random packet loss or corruption), or software
 /// or hardware limitations (such as a limited number or size of usable network buffers).
 #[derive(Debug)]
-pub struct FaultInjector<D: for<'a> Device<'a>> {
+pub struct FaultInjector<D: for<'a> MarkingDevice<'a>> {
     inner: D,
     state: RefCell<State>,
     config: Config,
 }
 
-impl<D: for<'a> Device<'a>> FaultInjector<D> {
+impl<D: for<'a> MarkingDevice<'a>> FaultInjector<D> {
     /// Create a fault injector device, using the given random number generator seed.
     pub fn new(inner: D, seed: u32) -> FaultInjector<D> {
         let state = State {
@@ -197,12 +197,12 @@ impl<D: for<'a> Device<'a>> FaultInjector<D> {
     }
 }
 
-impl<'a, D> Device<'a> for FaultInjector<D>
+impl<'a, D> MarkingDevice<'a> for FaultInjector<D>
 where
-    D: for<'b> Device<'b>,
+    D: for<'b> MarkingDevice<'b>,
 {
-    type RxToken = RxToken<'a, <D as Device<'a>>::RxToken>;
-    type TxToken = TxToken<'a, <D as Device<'a>>::TxToken>;
+    type RxToken = RxToken<'a, <D as MarkingDevice<'a>>::RxToken>;
+    type TxToken = TxToken<'a, <D as MarkingDevice<'a>>::TxToken>;
 
     fn capabilities(&self) -> DeviceCapabilities {
         let mut caps = self.inner.capabilities();

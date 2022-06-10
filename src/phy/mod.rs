@@ -42,17 +42,13 @@ impl<'a> phy::Device<'a> for StmPhy {
     type RxToken = StmPhyRxToken<'a>;
     type TxToken = StmPhyTxToken<'a>;
 
-    fn receive(
-        &'a mut self,
-        _rx_packet_id: PacketId,
-        _tx_packet_id: PacketId,
-    ) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
         Some((
             StmPhyRxToken(&mut self.rx_buffer[..]),
             StmPhyTxToken(&mut self.tx_buffer[..]),
         ))
     }
-    fn transmit(&'a mut self, _packet_id: PacketId) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self) -> Option<Self::TxToken> {
         Some(StmPhyTxToken(&mut self.tx_buffer[..]))
     }
 
@@ -337,6 +333,23 @@ impl Default for Medium {
     }
 }
 
+pub trait MarkingDevice<'a> {
+    type RxToken: RxToken + 'a;
+    type TxToken: TxToken + 'a;
+
+    fn receive(
+        &'a mut self,
+        rx_packet_id: PacketId,
+        tx_packet_id: PacketId,
+    ) -> Option<(Self::RxToken, Self::TxToken)>;
+
+    /// Construct a transmit token.
+    fn transmit(&'a mut self, packet_id: PacketId) -> Option<Self::TxToken>;
+
+    /// Get a description of device capabilities.
+    fn capabilities(&self) -> DeviceCapabilities;
+}
+
 /// An interface for sending and receiving raw network frames.
 ///
 /// The interface is based on _tokens_, which are types that allow to receive/transmit a
@@ -352,17 +365,38 @@ pub trait Device<'a> {
     /// on the contents of the received packet. For example, this makes it possible to
     /// handle arbitrarily large ICMP echo ("ping") requests, where the all received bytes
     /// need to be sent back, without heap allocation.
-    fn receive(
-        &'a mut self,
-        rx_packet_id: PacketId,
-        tx_packet_id: PacketId,
-    ) -> Option<(Self::RxToken, Self::TxToken)>;
+    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)>;
 
     /// Construct a transmit token.
-    fn transmit(&'a mut self, packet_id: PacketId) -> Option<Self::TxToken>;
+    fn transmit(&'a mut self) -> Option<Self::TxToken>;
 
     /// Get a description of device capabilities.
     fn capabilities(&self) -> DeviceCapabilities;
+}
+
+impl<'a, T> MarkingDevice<'a> for T
+where
+    T: Device<'a>,
+{
+    type RxToken = <Self as Device<'a>>::RxToken;
+
+    type TxToken = <Self as Device<'a>>::TxToken;
+
+    fn receive(
+        &'a mut self,
+        _rx_packet_id: PacketId,
+        _tx_packet_id: PacketId,
+    ) -> Option<(Self::RxToken, Self::TxToken)> {
+        self.receive()
+    }
+
+    fn transmit(&'a mut self, _packet_id: PacketId) -> Option<Self::TxToken> {
+        self.transmit()
+    }
+
+    fn capabilities(&self) -> DeviceCapabilities {
+        self.capabilities()
+    }
 }
 
 /// A token to receive a single network packet.
