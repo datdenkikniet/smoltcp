@@ -16,6 +16,7 @@ pub struct RawSocket {
     medium: Medium,
     lower: Rc<RefCell<sys::RawSocketDesc>>,
     mtu: usize,
+    packet_couner: usize,
 }
 
 impl AsRawFd for RawSocket {
@@ -25,6 +26,12 @@ impl AsRawFd for RawSocket {
 }
 
 impl RawSocket {
+    pub fn next_packet_id(&mut self) -> PacketId {
+        let id = PacketId::new(self.packet_couner);
+        self.packet_couner = self.packet_couner.wrapping_add(1);
+        id
+    }
+
     /// Creates a raw socket, bound to the interface called `name`.
     ///
     /// This requires superuser privileges or a corresponding capability bit
@@ -52,6 +59,7 @@ impl RawSocket {
             medium,
             lower: Rc::new(RefCell::new(lower)),
             mtu,
+            packet_couner: 0,
         })
     }
 }
@@ -70,8 +78,8 @@ impl<'a> Device<'a> for RawSocket {
 
     fn receive(
         &'a mut self,
-        _rx_packet_id: Option<PacketId>,
-        _tx_packet_id: Option<PacketId>,
+        _rx_packet_id: PacketId,
+        _tx_packet_id: PacketId,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let mut lower = self.lower.borrow_mut();
         let mut buffer = vec![0; self.mtu];
@@ -89,7 +97,7 @@ impl<'a> Device<'a> for RawSocket {
         }
     }
 
-    fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, _packet_id: PacketId) -> Option<Self::TxToken> {
         Some(TxToken {
             lower: self.lower.clone(),
         })
