@@ -22,8 +22,8 @@ impl UdpMetadata {
         self.endpoint
     }
 
-    pub fn packet_id(&self) -> &Option<PacketId> {
-        &self.packet_id
+    pub fn packet_id(self) -> Option<PacketId> {
+        self.packet_id
     }
 }
 
