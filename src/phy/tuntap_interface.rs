@@ -56,8 +56,8 @@ impl<'a> Device<'a> for TunTapInterface {
 
     fn receive(
         &'a mut self,
-        _rx_packet_id: Option<PacketId>,
-        _tx_packet_id: Option<PacketId>,
+        _rx_packet_id: PacketId,
+        _tx_packet_id: PacketId,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let mut lower = self.lower.borrow_mut();
         let mut buffer = vec![0; self.mtu];
@@ -75,7 +75,7 @@ impl<'a> Device<'a> for TunTapInterface {
         }
     }
 
-    fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, _packet_id: PacketId) -> Option<Self::TxToken> {
         Some(TxToken {
             lower: self.lower.clone(),
         })

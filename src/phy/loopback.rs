@@ -45,8 +45,8 @@ impl<'a> Device<'a> for Loopback {
 
     fn receive(
         &'a mut self,
-        _rx_packet_id: Option<PacketId>,
-        _tx_packet_id: Option<PacketId>,
+        _rx_packet_id: PacketId,
+        _tx_packet_id: PacketId,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         self.queue.pop_front().map(move |buffer| {
             let rx = RxToken { buffer };
@@ -57,7 +57,7 @@ impl<'a> Device<'a> for Loopback {
         })
     }
 
-    fn transmit(&'a mut self, _packet_id: Option<PacketId>) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, _packet_id: PacketId) -> Option<Self::TxToken> {
         Some(TxToken {
             queue: &mut self.queue,
         })
