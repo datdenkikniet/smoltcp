@@ -178,8 +178,8 @@ where
 
     fn receive(
         &'a mut self,
-        rx_packet_id: Option<PacketId>,
-        tx_packet_id: Option<PacketId>,
+        rx_packet_id: PacketId,
+        tx_packet_id: PacketId,
     ) -> Option<(Self::RxToken, Self::TxToken)> {
         let sink = &self.sink;
         let mode = self.mode;
@@ -200,7 +200,7 @@ where
             })
     }
 
-    fn transmit(&'a mut self, packet_id: Option<PacketId>) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, packet_id: PacketId) -> Option<Self::TxToken> {
         let sink = &self.sink;
         let mode = self.mode;
         self.lower

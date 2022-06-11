@@ -462,7 +462,7 @@ impl<'a> Socket<'a> {
     pub(crate) fn process(
         &mut self,
         cx: &mut Context,
-        packet_id: Option<PacketId>,
+        packet_id: PacketId,
         ip_repr: &IpRepr,
         repr: &UdpRepr,
         payload: &[u8],
@@ -483,6 +483,7 @@ impl<'a> Socket<'a> {
             size
         );
 
+        let packet_id = Some(packet_id);
         let metadata = UdpMetadata {
             endpoint: remote_endpoint,
             packet_id,
@@ -503,7 +504,7 @@ impl<'a> Socket<'a> {
 
     pub(crate) fn dispatch<F, E>(&mut self, cx: &mut Context, emit: F) -> Result<(), E>
     where
-        F: FnOnce(&mut Context, (Option<PacketId>, IpRepr, UdpRepr, &[u8])) -> Result<(), E>,
+        F: FnOnce(&mut Context, (PacketId, IpRepr, UdpRepr, &[u8])) -> Result<(), E>,
     {
         let endpoint = self.endpoint;
         let hop_limit = self.hop_limit.unwrap_or(64);
@@ -542,15 +543,14 @@ impl<'a> Socket<'a> {
                 repr.header_len() + payload_buf.len(),
                 hop_limit,
             );
-            emit(
-                cx,
-                (
-                    packet_meta.packet_id.as_ref().map(|v| v.copy()),
-                    ip_repr,
-                    repr,
-                    payload_buf,
-                ),
-            )
+
+            let packet_id = packet_meta
+                .packet_id
+                .as_ref()
+                .map(PacketId::copy)
+                .unwrap_or_else(|| cx.next_packet_id());
+
+            emit(cx, (packet_id, ip_repr, repr, payload_buf))
         });
         match res {
             Err(Empty) => Ok(()),
@@ -774,15 +774,30 @@ mod test {
         assert_eq!(socket.recv(), Err(RecvError::Exhausted));
 
         assert!(socket.accepts(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR));
-        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(
+            &mut cx,
+            PacketId::new(0),
+            &REMOTE_IP_REPR,
+            &REMOTE_UDP_REPR,
+            PAYLOAD,
+        );
         assert!(socket.can_recv());
 
         assert!(socket.accepts(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR));
-        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(
+            &mut cx,
+            PacketId::new(1),
+            &REMOTE_IP_REPR,
+            &REMOTE_UDP_REPR,
+            PAYLOAD,
+        );
 
         assert_eq!(
             socket.recv(),
-            Ok((&b"abcdef"[..], UdpMetadata::unmarked(REMOTE_END)))
+            Ok((
+                &b"abcdef"[..],
+                UdpMetadata::marked(REMOTE_END, PacketId::new(0))
+            ))
         );
         assert!(!socket.can_recv());
     }
@@ -796,14 +811,26 @@ mod test {
 
         assert_eq!(socket.peek(), Err(RecvError::Exhausted));
 
-        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(
+            &mut cx,
+            PacketId::new(0),
+            &REMOTE_IP_REPR,
+            &REMOTE_UDP_REPR,
+            PAYLOAD,
+        );
         assert_eq!(
             socket.peek(),
-            Ok((&b"abcdef"[..], &UdpMetadata::unmarked(REMOTE_END)))
+            Ok((
+                &b"abcdef"[..],
+                &UdpMetadata::marked(REMOTE_END, PacketId::new(0))
+            ))
         );
         assert_eq!(
             socket.recv(),
-            Ok((&b"abcdef"[..], UdpMetadata::unmarked(REMOTE_END)))
+            Ok((
+                &b"abcdef"[..],
+                UdpMetadata::marked(REMOTE_END, PacketId::new(0))
+            ))
         );
         assert_eq!(socket.peek(), Err(RecvError::Exhausted));
     }
@@ -816,12 +843,18 @@ mod test {
         assert_eq!(socket.bind(LOCAL_PORT), Ok(()));
 
         assert!(socket.accepts(&mut cx, &REMOTE_IP_REPR, &REMOTE_UDP_REPR));
-        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(
+            &mut cx,
+            PacketId::new(0),
+            &REMOTE_IP_REPR,
+            &REMOTE_UDP_REPR,
+            PAYLOAD,
+        );
 
         let mut slice = [0; 4];
         assert_eq!(
             socket.recv_slice(&mut slice[..]),
-            Ok((4, UdpMetadata::unmarked(REMOTE_END)))
+            Ok((4, UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
         );
         assert_eq!(&slice, b"abcd");
     }
@@ -833,17 +866,23 @@ mod test {
 
         assert_eq!(socket.bind(LOCAL_PORT), Ok(()));
 
-        socket.process(&mut cx, None, &REMOTE_IP_REPR, &REMOTE_UDP_REPR, PAYLOAD);
+        socket.process(
+            &mut cx,
+            PacketId::new(0),
+            &REMOTE_IP_REPR,
+            &REMOTE_UDP_REPR,
+            PAYLOAD,
+        );
 
         let mut slice = [0; 4];
         assert_eq!(
             socket.peek_slice(&mut slice[..]),
-            Ok((4, &UdpMetadata::unmarked(REMOTE_END)))
+            Ok((4, &UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
         );
         assert_eq!(&slice, b"abcd");
         assert_eq!(
             socket.recv_slice(&mut slice[..]),
-            Ok((4, UdpMetadata::unmarked(REMOTE_END)))
+            Ok((4, UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
         );
         assert_eq!(&slice, b"abcd");
         assert_eq!(socket.peek_slice(&mut slice[..]), Err(RecvError::Exhausted));
@@ -929,10 +968,10 @@ mod test {
             src_port: REMOTE_PORT,
             dst_port: LOCAL_PORT,
         };
-        socket.process(&mut cx, None, &REMOTE_IP_REPR, &repr, &[]);
+        socket.process(&mut cx, PacketId::new(0), &REMOTE_IP_REPR, &repr, &[]);
         assert_eq!(
             socket.recv(),
-            Ok((&[][..], UdpMetadata::unmarked(REMOTE_END)))
+            Ok((&[][..], UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
         );
     }
 
