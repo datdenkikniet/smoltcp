@@ -11,7 +11,7 @@ use crate::storage::Empty;
 use crate::wire::{IpEndpoint, IpListenEndpoint, IpProtocol, IpRepr, UdpRepr};
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct UdpMetadata {
     packet_id: Option<PacketId>,
     endpoint: IpEndpoint,
@@ -319,10 +319,7 @@ impl<'a> Socket<'a> {
 
         let payload_buf = self
             .tx_buffer
-            .enqueue(
-                size,
-                UdpMetadata::marked(remote_endpoint, packet_id.clone()),
-            )
+            .enqueue(size, UdpMetadata::marked(remote_endpoint, packet_id.copy()))
             .map_err(|_| SendError::BufferFull)?;
 
         net_trace!(
@@ -545,11 +542,10 @@ impl<'a> Socket<'a> {
                 repr.header_len() + payload_buf.len(),
                 hop_limit,
             );
-            // TODO: we must only use packet_id once
             emit(
                 cx,
                 (
-                    packet_meta.packet_id.as_ref().cloned(),
+                    packet_meta.packet_id.as_ref().map(|v| v.copy()),
                     ip_repr,
                     repr,
                     payload_buf,
@@ -583,7 +579,12 @@ mod test {
     use crate::Error;
 
     fn buffer(packets: usize) -> PacketBuffer<'static> {
-        PacketBuffer::new(vec![PacketMetadata::EMPTY; packets], vec![0; 16 * packets])
+        PacketBuffer::new(
+            (0..packets)
+                .map(|_| PacketMetadata::EMPTY)
+                .collect::<Vec<_>>(),
+            vec![0; 16 * packets],
+        )
     }
 
     fn socket(
@@ -917,7 +918,8 @@ mod test {
 
     #[test]
     fn test_process_empty_payload() {
-        let recv_buffer = PacketBuffer::new(vec![PacketMetadata::EMPTY; 1], vec![]);
+        let meta = Box::leak(Box::new([PacketMetadata::EMPTY]));
+        let recv_buffer = PacketBuffer::new(&mut meta[..], vec![]);
         let mut socket = socket(recv_buffer, buffer(0));
         let mut cx = Context::mock();
 
@@ -936,7 +938,8 @@ mod test {
 
     #[test]
     fn test_closing() {
-        let recv_buffer = PacketBuffer::new(vec![PacketMetadata::EMPTY; 1], vec![]);
+        let meta = Box::leak(Box::new([PacketMetadata::EMPTY]));
+        let recv_buffer = PacketBuffer::new(&mut meta[..], vec![]);
         let mut socket = socket(recv_buffer, buffer(0));
         assert_eq!(socket.bind(LOCAL_PORT), Ok(()));
 
