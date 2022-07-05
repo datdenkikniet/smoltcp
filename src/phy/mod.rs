@@ -140,27 +140,22 @@ pub use self::tuntap_interface::TunTapInterface;
 /// An ID that can be used to uniquely identify a packet to a [`Device`],
 /// sent or received by that same [`Device`]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, PartialEq)]
-pub struct PacketId {
-    id: usize,
-}
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct PacketId(usize);
 
 impl PacketId {
-    pub const fn none() -> Option<Self> {
-        None
-    }
-
     pub fn id(&self) -> usize {
-        self.id
+        self.0
     }
 
-    pub(crate) fn copy(&self) -> Self {
-        Self { id: self.id }
-    }
-
-    /// CAUTION: don't use too often...
+    /// Create a new packet ID.
+    ///
+    /// A caller of this function should know the context in which
+    /// this ID is relevant, and transfer it to the correct handlers,
+    /// both upwards (i.e. to a UDP socket sending out marked packets),
+    /// and downwards (most often to an underlying [`Device`])
     pub(crate) fn new(id: usize) -> Self {
-        Self { id }
+        Self(id)
     }
 }
 

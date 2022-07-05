@@ -11,40 +11,44 @@ use crate::storage::Empty;
 use crate::wire::{IpEndpoint, IpListenEndpoint, IpProtocol, IpRepr, UdpRepr};
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct UdpMetadata {
-    packet_id: Option<PacketId>,
     endpoint: IpEndpoint,
+    packet_id: Option<PacketId>,
 }
 
 impl UdpMetadata {
+    /// The endpoint of this metadata
     pub fn endpoint(&self) -> IpEndpoint {
         self.endpoint
     }
 
+    /// The packet ID of this metadata
     pub fn packet_id(self) -> Option<PacketId> {
         self.packet_id
+    }
+
+    /// Create a new metadata instance.
+    ///
+    /// If `packet_id` is `Some`, it can be used to track a datagram
+    /// as it is handled by the networking stack, or other elements of `smoltcp`
+    /// that interact with the specific datagram.
+    pub(crate) fn new(endpoint: IpEndpoint, packet_id: Option<PacketId>) -> Self {
+        Self {
+            endpoint,
+            packet_id,
+        }
     }
 }
 
 impl core::fmt::Display for UdpMetadata {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.endpoint)
-    }
-}
-
-impl UdpMetadata {
-    pub(crate) fn unmarked(endpoint: IpEndpoint) -> Self {
-        Self {
-            endpoint,
-            packet_id: None,
-        }
-    }
-    pub(crate) fn marked(endpoint: IpEndpoint, packet_id: PacketId) -> Self {
-        Self {
-            endpoint,
-            packet_id: Some(packet_id),
-        }
+        write!(
+            f,
+            "{}, Packet ID: {:?}",
+            self.endpoint,
+            self.packet_id.map(|p| p.id())
+        )
     }
 }
 
@@ -285,7 +289,7 @@ impl<'a> Socket<'a> {
 
         let payload_buf = self
             .tx_buffer
-            .enqueue(size, UdpMetadata::unmarked(remote_endpoint))
+            .enqueue(size, UdpMetadata::new(remote_endpoint, None))
             .map_err(|_| SendError::BufferFull)?;
 
         net_trace!(
@@ -319,7 +323,7 @@ impl<'a> Socket<'a> {
 
         let payload_buf = self
             .tx_buffer
-            .enqueue(size, UdpMetadata::marked(remote_endpoint, packet_id.copy()))
+            .enqueue(size, UdpMetadata::new(remote_endpoint, Some(packet_id)))
             .map_err(|_| SendError::BufferFull)?;
 
         net_trace!(
@@ -358,7 +362,7 @@ impl<'a> Socket<'a> {
 
         let size = self
             .tx_buffer
-            .enqueue_with_infallible(max_size, UdpMetadata::unmarked(remote_endpoint), f)
+            .enqueue_with_infallible(max_size, UdpMetadata::new(remote_endpoint, None), f)
             .map_err(|_| SendError::BufferFull)?;
 
         net_trace!(
@@ -544,11 +548,7 @@ impl<'a> Socket<'a> {
                 hop_limit,
             );
 
-            let packet_id = packet_meta
-                .packet_id
-                .as_ref()
-                .map(PacketId::copy)
-                .unwrap_or_else(|| cx.next_packet_id());
+            let packet_id = packet_meta.packet_id.unwrap_or_else(|| cx.next_packet_id());
 
             emit(cx, (packet_id, ip_repr, repr, payload_buf))
         });
@@ -796,7 +796,7 @@ mod test {
             socket.recv(),
             Ok((
                 &b"abcdef"[..],
-                UdpMetadata::marked(REMOTE_END, PacketId::new(0))
+                UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))
             ))
         );
         assert!(!socket.can_recv());
@@ -822,14 +822,14 @@ mod test {
             socket.peek(),
             Ok((
                 &b"abcdef"[..],
-                &UdpMetadata::marked(REMOTE_END, PacketId::new(0))
+                &UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))
             ))
         );
         assert_eq!(
             socket.recv(),
             Ok((
                 &b"abcdef"[..],
-                UdpMetadata::marked(REMOTE_END, PacketId::new(0))
+                UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))
             ))
         );
         assert_eq!(socket.peek(), Err(RecvError::Exhausted));
@@ -854,7 +854,7 @@ mod test {
         let mut slice = [0; 4];
         assert_eq!(
             socket.recv_slice(&mut slice[..]),
-            Ok((4, UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
+            Ok((4, UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))))
         );
         assert_eq!(&slice, b"abcd");
     }
@@ -877,12 +877,12 @@ mod test {
         let mut slice = [0; 4];
         assert_eq!(
             socket.peek_slice(&mut slice[..]),
-            Ok((4, &UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
+            Ok((4, &UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))))
         );
         assert_eq!(&slice, b"abcd");
         assert_eq!(
             socket.recv_slice(&mut slice[..]),
-            Ok((4, UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
+            Ok((4, UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))))
         );
         assert_eq!(&slice, b"abcd");
         assert_eq!(socket.peek_slice(&mut slice[..]), Err(RecvError::Exhausted));
@@ -971,7 +971,10 @@ mod test {
         socket.process(&mut cx, PacketId::new(0), &REMOTE_IP_REPR, &repr, &[]);
         assert_eq!(
             socket.recv(),
-            Ok((&[][..], UdpMetadata::marked(REMOTE_END, PacketId::new(0))))
+            Ok((
+                &[][..],
+                UdpMetadata::new(REMOTE_END, Some(PacketId::new(0)))
+            ))
         );
     }
 
