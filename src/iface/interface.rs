@@ -1026,9 +1026,8 @@ impl<'a> Interface<'a> {
         loop {
             let tx_packet_id = inner.next_packet_id();
             let rx_packet_id = inner.next_packet_id();
-            let device_rx_packet_id = rx_packet_id.copy();
 
-            if let Some((rx_token, tx_token)) = device.receive(device_rx_packet_id, tx_packet_id) {
+            if let Some((rx_token, tx_token)) = device.receive(rx_packet_id, tx_packet_id) {
                 let res = rx_token.consume(inner.now, |frame| {
                     match inner.caps.medium {
                         #[cfg(feature = "medium-ethernet")]
@@ -3914,7 +3913,7 @@ mod test {
             socket.recv(),
             Ok((
                 &UDP_PAYLOAD[..],
-                UdpMetadata::marked(IpEndpoint::new(src_ip.into(), 67), PacketId::new(0))
+                UdpMetadata::new(IpEndpoint::new(src_ip.into(), 67), Some(PacketId::new(0)))
             ))
         );
     }
@@ -4819,7 +4818,7 @@ mod test {
             socket.recv(),
             Ok((
                 &UDP_PAYLOAD[..],
-                UdpMetadata::marked(IpEndpoint::new(src_addr.into(), 67), PacketId::new(0))
+                UdpMetadata::new(IpEndpoint::new(src_addr.into(), 67), Some(PacketId::new(0)))
             ))
         );
     }

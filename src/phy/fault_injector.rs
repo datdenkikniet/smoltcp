@@ -241,13 +241,13 @@ where
             })
     }
 
-    fn transmit(&'a mut self, timestamp_id: PacketId) -> Option<Self::TxToken> {
+    fn transmit(&'a mut self, tx_packet_id: PacketId) -> Option<Self::TxToken> {
         let &mut Self {
             ref mut inner,
             ref state,
             config,
         } = self;
-        inner.transmit(timestamp_id).map(|token| TxToken {
+        inner.transmit(tx_packet_id).map(|token| TxToken {
             state,
             config,
             token,
