@@ -1378,7 +1378,6 @@ impl<'a> InterfaceInner<'a> {
                 max_transmission_unit: 1514,
                 #[cfg(not(feature = "medium-ethernet"))]
                 max_transmission_unit: 1500,
-                hardware_timestamping: false,
             },
             now: Instant::from_millis_const(0),
             packet_counter: 0,

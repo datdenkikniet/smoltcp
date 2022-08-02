@@ -270,8 +270,6 @@ pub struct DeviceCapabilities {
     /// If the network device is capable of verifying or computing checksums for some protocols,
     /// it can request that the stack not do so in software to improve performance.
     pub checksum: ChecksumCapabilities,
-
-    pub hardware_timestamping: bool,
 }
 
 impl DeviceCapabilities {
