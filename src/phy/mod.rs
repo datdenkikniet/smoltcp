@@ -152,8 +152,8 @@ impl PacketId {
     ///
     /// A caller of this function should know the context in which
     /// this ID is relevant, and transfer it to the correct handlers,
-    /// both upwards (i.e. to a UDP socket sending out marked packets),
-    /// and downwards (most often to an underlying [`Device`])
+    /// both "upwards" (i.e. to a UDP socket sending out marked packets),
+    /// and "downwards" (most often to an underlying [`Device`])
     pub(crate) fn new(id: usize) -> Self {
         Self(id)
     }
@@ -335,6 +335,22 @@ impl Default for Medium {
 /// The interface is based on _tokens_, which are types that allow to receive/transmit a
 /// single packet. The `receive` and `transmit` functions only construct such tokens, the
 /// real sending/receiving operation are performed when the tokens are consumed.
+///
+/// # Packet IDs
+/// The driver may use packet IDs, provided by `smoltcp`, to associate arbitrary data with
+/// data received using `RxToken`s and transmitted using `TxToken`s.
+///
+/// In special cases, `smoltcp` forwards a copy of these IDs to the application, after which
+/// the application can retrieve said data from the driver.
+///
+/// An example of such arbitrary data is ethernet frame timestamping information using UDP packets.
+/// An application can send or receive UDP packets (see [send_marked] and [UdpMetadata]). Upon reception
+/// or transmission of the data frames containing the UDP packets associated with those [`PacketId`]s,
+/// the driver associates timestamping data with them. Then, the application can use the returned
+/// [`PacketId`] to obtain timestamping information about those packets.
+///
+/// [send_marked]: crate::socket::udp::Socket::send_marked
+/// [UdpMetadata]: crate::socket::udp::UdpMetadata
 pub trait Device<'a> {
     type RxToken: RxToken + 'a;
     type TxToken: TxToken + 'a;
@@ -345,6 +361,11 @@ pub trait Device<'a> {
     /// on the contents of the received packet. For example, this makes it possible to
     /// handle arbitrarily large ICMP echo ("ping") requests, where the all received bytes
     /// need to be sent back, without heap allocation.
+    ///
+    /// `rx_packet_id` can be used to associate information with the data received using
+    /// the returned `RxToken`.
+    /// `tx_packet_id` can be used to associate information with the data transmitted using
+    /// the returned `TxToken`.
     fn receive(
         &'a mut self,
         rx_packet_id: PacketId,
@@ -352,6 +373,9 @@ pub trait Device<'a> {
     ) -> Option<(Self::RxToken, Self::TxToken)>;
 
     /// Construct a transmit token.
+    ///
+    /// `packet_id` can be used to associate information with the data transmitted using
+    /// the returned `TxToken`
     fn transmit(&'a mut self, packet_id: PacketId) -> Option<Self::TxToken>;
 
     /// Get a description of device capabilities.
