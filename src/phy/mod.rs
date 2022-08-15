@@ -140,7 +140,7 @@ pub use self::tuntap_interface::TunTapInterface;
 /// An ID that can be used to uniquely identify a packet to a [`Device`],
 /// sent or received by that same [`Device`]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct PacketId(usize);
 
 impl PacketId {
