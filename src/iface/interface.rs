@@ -1023,57 +1023,55 @@ impl<'a> Interface<'a> {
             out_packets: _out_packets,
         } = self;
 
-        loop {
+        while let (rx_packet_id, Some((rx_token, tx_token))) = {
             let tx_packet_id = inner.next_packet_id();
             let rx_packet_id = inner.next_packet_id();
-
-            if let Some((rx_token, tx_token)) = device.receive(rx_packet_id, tx_packet_id) {
-                let res = rx_token.consume(inner.now, |frame| {
-                    match inner.caps.medium {
-                        #[cfg(feature = "medium-ethernet")]
-                        Medium::Ethernet => {
-                            if let Some(packet) =
-                                inner.process_ethernet(rx_packet_id, sockets, &frame, _fragments)
-                            {
-                                if let Err(err) = inner.dispatch(tx_token, packet) {
-                                    net_debug!("Failed to send response: {}", err);
-                                }
-                            }
-                        }
-                        #[cfg(feature = "medium-ip")]
-                        Medium::Ip => {
-                            if let Some(packet) =
-                                inner.process_ip(rx_packet_id, sockets, &frame, _fragments)
-                            {
-                                if let Err(err) = inner.dispatch_ip(tx_token, packet, None) {
-                                    net_debug!("Failed to send response: {}", err);
-                                }
-                            }
-                        }
-                        #[cfg(feature = "medium-ieee802154")]
-                        Medium::Ieee802154 => {
-                            if let Some(packet) =
-                                inner.process_ieee802154(rx_packet_id, sockets, &frame, _fragments)
-                            {
-                                if let Err(err) =
-                                    inner.dispatch_ip(tx_token, packet, Some(_out_packets))
-                                {
-                                    net_debug!("Failed to send response: {}", err);
-                                }
+            (rx_packet_id, device.receive(rx_packet_id, tx_packet_id))
+        } {
+            let res = rx_token.consume(inner.now, |frame| {
+                match inner.caps.medium {
+                    #[cfg(feature = "medium-ethernet")]
+                    Medium::Ethernet => {
+                        if let Some(packet) =
+                            inner.process_ethernet(rx_packet_id, sockets, &frame, _fragments)
+                        {
+                            if let Err(err) = inner.dispatch(tx_token, packet) {
+                                net_debug!("Failed to send response: {}", err);
                             }
                         }
                     }
-                    processed_any = true;
-                    Ok(())
-                });
-
-                if let Err(err) = res {
-                    net_debug!("Failed to consume RX token: {}", err);
+                    #[cfg(feature = "medium-ip")]
+                    Medium::Ip => {
+                        if let Some(packet) =
+                            inner.process_ip(rx_packet_id, sockets, &frame, _fragments)
+                        {
+                            if let Err(err) = inner.dispatch_ip(tx_token, packet, None) {
+                                net_debug!("Failed to send response: {}", err);
+                            }
+                        }
+                    }
+                    #[cfg(feature = "medium-ieee802154")]
+                    Medium::Ieee802154 => {
+                        if let Some(packet) =
+                            inner.process_ieee802154(rx_packet_id, sockets, &frame, _fragments)
+                        {
+                            if let Err(err) =
+                                inner.dispatch_ip(tx_token, packet, Some(_out_packets))
+                            {
+                                net_debug!("Failed to send response: {}", err);
+                            }
+                        }
+                    }
                 }
-            } else {
-                break processed_any;
+                processed_any = true;
+                Ok(())
+            });
+
+            if let Err(err) = res {
+                net_debug!("Failed to consume RX token: {}", err);
             }
         }
+        processed_any
     }
 
     fn socket_egress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
